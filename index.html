@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RadioCalio2 - User Management</title>
+    <link rel="stylesheet" href="index.css">
+</head>
+<body>
+    <div class="container">
+        <h1>RadioCalio2 - User Management</h1>
+        <div class="navigation">
+            <a href="/radio" class="radio-link">🎵 Go to Radio Player</a>
+        </div>
+        
+        <div class="stats">
+            <div class="stat-card">
+                <h3 id="userCount">0</h3>
+                <p>Total Users</p>
+            </div>
+            <div class="stat-card">
+                <h3 id="postCount">0</h3>
+                <p>Total Posts</p>
+            </div>
+        </div>
+
+        <div id="message"></div>
+
+        <h2>Add New User</h2>
+        <form id="userForm">
+            <label for="name">Name:</label>
+            <input type="text" id="name" name="name" required>
+            
+            <label for="email">Email:</label>
+            <input type="email" id="email" name="email" required>
+            
+            <label for="password">Password:</label>
+            <input type="password" id="password" name="password" placeholder="Optional - default will be used if empty">
+            
+            <button type="submit">Add User</button>
+        </form>
+    </div>
+
+    <div class="container">
+        <h2>All Users</h2>
+        <div id="usersList" class="users-list">
+            Loading users...
+        </div>
+    </div>
+
+    <script>
+        // API base URL
+        const API_BASE = '';
+
+        // DOM elements
+        const userForm = document.getElementById('userForm');
+        const messageDiv = document.getElementById('message');
+        const usersListDiv = document.getElementById('usersList');
+        const userCountSpan = document.getElementById('userCount');
+        const postCountSpan = document.getElementById('postCount');
+
+        // Show message
+        function showMessage(text, type = 'success') {
+            messageDiv.innerHTML = `<div class="message ${type}">${text}</div>`;
+            setTimeout(() => {
+                messageDiv.innerHTML = '';
+            }, 5000);
+        }
+
+        // Load users from API
+        async function loadUsers() {
+            try {
+                const response = await fetch(`${API_BASE}/api/users`);
+                const data = await response.json();
+                
+                if (data.users) {
+                    displayUsers(data.users);
+                    userCountSpan.textContent = data.users.length;
+                } else {
+                    usersListDiv.innerHTML = '<p>No users found</p>';
+                }
+            } catch (error) {
+                usersListDiv.innerHTML = '<p class="error">Error loading users: ' + error.message + '</p>';
+            }
+        }
+
+        // Load posts count
+        async function loadStats() {
+            try {
+                const response = await fetch(`${API_BASE}/api/posts`);
+                const data = await response.json();
+                
+                if (data.posts) {
+                    postCountSpan.textContent = data.posts.length;
+                }
+            } catch (error) {
+                console.error('Error loading posts:', error);
+            }
+        }
+
+        // Display users
+        function displayUsers(users) {
+            if (users.length === 0) {
+                usersListDiv.innerHTML = '<p>No users found</p>';
+                return;
+            }
+
+            const usersHtml = users.map(user => `
+                <div class="user-card">
+                    <strong>${user.name}</strong><br>
+                    <small>Email: ${user.email}</small><br>
+                    <small>ID: ${user.id} | Created: ${new Date(user.created_at).toLocaleDateString()}</small>
+                </div>
+            `).join('');
+
+            usersListDiv.innerHTML = usersHtml;
+        }
+
+        // Handle form submission
+        userForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const formData = new FormData(userForm);
+            const userData = {
+                name: formData.get('name'),
+                email: formData.get('email'),
+                password: formData.get('password') || 'default_password'
+            };
+
+            try {
+                const response = await fetch(`${API_BASE}/api/users`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(userData)
+                });
+
+                const result = await response.json();
+
+                if (response.ok) {
+                    showMessage(`User "${userData.name}" created successfully!`, 'success');
+                    userForm.reset();
+                    loadUsers(); // Refresh the users list
+                    loadStats(); // Update stats
+                } else {
+                    showMessage(`Error: ${result.error}`, 'error');
+                }
+            } catch (error) {
+                showMessage(`Error: ${error.message}`, 'error');
+            }
+        });
+
+        // Load data when page loads
+        document.addEventListener('DOMContentLoaded', () => {
+            loadUsers();
+            loadStats();
+        });
+    </script>
+</body>
+</html>

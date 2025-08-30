@@ -1,0 +1,643 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RadioCalio2 - Live Stream Player</title>
+    <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700&family=Open+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="radio.css">
+</head>
+<body>
+    <div class="radio-container">
+        <header class="header">
+            <img src="RadioCalicoLogoTM.png" alt="RadioCalico Logo" class="logo" />
+            <h1 class="header-title">Radio Calico</h1>
+        </header>
+        
+        <div class="main-content">
+            <div class="album-section">
+                <div class="album-artwork">
+                    <img id="mainAlbumArt" src="" alt="Album Art" class="hidden-album-art" />
+                    <div id="mainArtworkPlaceholder" class="artwork-placeholder">♫</div>
+                    <div class="year-badge" id="yearBadge">1983</div>
+                    <div class="artist-overlay" id="artistOverlay">ARTIST</div>
+                </div>
+            </div>
+            
+            <div class="track-info-section">
+                <div class="track-details">
+                    <h2 class="artist-name" id="mainArtistName">Artist Name</h2>
+                    <h3 class="song-title" id="mainSongTitle">Song Title</h3>
+                    <p class="album-info" id="mainAlbumInfo">Album Name</p>
+                    
+                    <div class="quality-info">
+                        <p class="source-quality">Source quality: <span id="sourceQuality">16-bit 44.1kHz</span></p>
+                        <p class="stream-quality">Stream quality: <span id="streamQuality">48kHz FLAC / HLS Lossless</span></p>
+                    </div>
+                    
+                    <div class="rating-section-main">
+                        <span class="rate-text">Rate this track:</span>
+                        <button id="thumbsUpBtnMain" class="rating-btn-main thumbs-up" title="Thumbs Up">
+                            👍
+                        </button>
+                        <button id="thumbsDownBtnMain" class="rating-btn-main thumbs-down" title="Thumbs Down">
+                            👎
+                        </button>
+                    </div>
+                    
+                    <div class="player-controls">
+                        <button id="mainPlayBtn" class="main-play-btn">▶</button>
+                        <div class="time-display">
+                            <span id="mainCurrentTime">0:35</span> / <span class="live-text">Live</span>
+                        </div>
+                        <div class="volume-control">
+                            <button id="mainMuteBtn" class="volume-btn-main">🔊</button>
+                            <input type="range" id="mainVolumeSlider" class="volume-slider-main" min="0" max="100" value="50">
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <audio id="audioPlayer" preload="none" class="hidden-audio">
+            Your browser does not support the audio element.
+        </audio>
+        
+        <footer class="footer">
+            <div class="footer-content">
+                <h3>Previous tracks:</h3>
+                <ul class="previous-tracks" id="previousTracksList">
+                    <li><span class="artist">TLC:</span> <span class="track">Ain't 2 Proud 2 Beg</span></li>
+                    <li><span class="artist">The Raconteurs:</span> <span class="track">Steady, As She Goes</span></li>
+                    <li><span class="artist">Mick Jagger:</span> <span class="track">Just Another Night</span></li>
+                    <li><span class="artist">Beyoncé:</span> <span class="track">Irreplaceable (Album Version)</span></li>
+                    <li><span class="artist">Etta James:</span> <span class="track">I'd Rather Go Blind</span></li>
+                </ul>
+            </div>
+        </footer>
+    </div>
+
+    <script>
+        // Stream URL and Metadata URL
+        const streamUrl = 'https://d3d4yli4hf5bmh.cloudfront.net/hls/live.m3u8';
+        const metadataUrl = 'https://d3d4yli4hf5bmh.cloudfront.net/metadatav2.json';
+        const albumArtUrl = 'https://d3d4yli4hf5bmh.cloudfront.net/cover.jpg';
+        
+        // DOM Elements
+        const audioPlayer = document.getElementById('audioPlayer');
+        const playBtn = document.getElementById('playBtn');
+        const stopBtn = document.getElementById('stopBtn');
+        const muteBtn = document.getElementById('muteBtn');
+        const volumeSlider = document.getElementById('volumeSlider');
+        const volumeValue = document.getElementById('volumeValue');
+        const statusDiv = document.getElementById('status');
+        const visualizer = document.getElementById('visualizer');
+        
+        let hls = null;
+        let isPlaying = false;
+        let isMuted = false;
+        let metadataInterval = null;
+        let currentAlbumArt = null;
+        let currentTrack = { title: '', artist: '', album: '' };
+        let userRating = null; // null, 1 (thumbs up), or -1 (thumbs down)
+        let userId = null; // Simple user identifier
+        
+        // Initialize HLS player
+        function initializePlayer() {
+            console.log('Initializing HLS player...');
+            console.log('Stream URL:', streamUrl);
+            console.log('HLS supported:', Hls.isSupported());
+            console.log('Audio player element:', audioPlayer);
+            
+            // Set some basic audio properties
+            audioPlayer.crossOrigin = 'anonymous';
+            audioPlayer.preload = 'none';
+            
+            if (Hls.isSupported()) {
+                console.log('Using HLS.js for playback');
+                hls = new Hls({
+                    enableWorker: false, // Disable worker for debugging
+                    lowLatencyMode: false, // Disable for compatibility
+                    backBufferLength: 30,
+                    debug: true // Enable HLS debug logging
+                });
+                
+                hls.loadSource(streamUrl);
+                hls.attachMedia(audioPlayer);
+                
+                hls.on(Hls.Events.MANIFEST_PARSED, function() {
+                    console.log('HLS manifest parsed - stream ready');
+                    updateStatus('HLS stream loaded successfully', 'success');
+                });
+                
+                hls.on(Hls.Events.ERROR, function(event, data) {
+                    console.error('HLS Error:', event, data);
+                    if (data.fatal) {
+                        console.error('Fatal HLS error - attempting recovery');
+                        hls.recoverMediaError();
+                    }
+                    updateStatus(`HLS Error: ${data.details}`, 'error');
+                });
+                
+                hls.on(Hls.Events.FRAG_LOADED, function() {
+                    console.log('HLS fragment loaded - streaming active');
+                });
+                
+            } else if (audioPlayer.canPlayType('application/vnd.apple.mpegurl')) {
+                // Native HLS support (Safari)
+                console.log('Using native HLS support');
+                audioPlayer.src = streamUrl;
+                updateStatus('Using native HLS support', 'success');
+            } else {
+                console.error('HLS not supported in this browser');
+                // Try direct MP3 fallback if available
+                console.log('Attempting direct audio fallback...');
+                audioPlayer.src = streamUrl; // Some browsers can handle it anyway
+                updateStatus('Attempting direct audio playback', 'warning');
+            }
+        }
+        
+        // Update status message (simplified)
+        function updateStatus(message, type = '') {
+            console.log(`Status: ${message}`, type);
+        }
+        
+        // Load album art with fallback
+        function loadAlbumArt() {
+            const albumArtImg = document.getElementById('mainAlbumArt');
+            const placeholder = document.getElementById('mainArtworkPlaceholder');
+            
+            if (!albumArtImg || !placeholder) {
+                console.error('Album art elements not found');
+                return;
+            }
+            
+            // Start with placeholder visible
+            placeholder.style.display = 'flex';
+            albumArtImg.style.display = 'none';
+            
+            // Add cache-busting parameter to ensure fresh image
+            const artUrl = `${albumArtUrl}?t=${Date.now()}`;
+            console.log('Loading album art from:', artUrl);
+            
+            // Create a new image to test if it loads
+            const testImg = new Image();
+            
+            testImg.onload = function() {
+                // If image loads successfully, show it
+                console.log('Album art loaded successfully');
+                albumArtImg.src = artUrl;
+                albumArtImg.style.display = 'block';
+                placeholder.style.display = 'none';
+                currentAlbumArt = artUrl;
+            };
+            
+            testImg.onerror = function() {
+                // If image fails to load, show placeholder
+                console.log('Album art failed to load, showing placeholder');
+                albumArtImg.style.display = 'none';
+                placeholder.style.display = 'flex';
+                currentAlbumArt = null;
+            };
+            
+            testImg.src = artUrl;
+        }
+        
+        // Generate browser fingerprint for persistent user identification
+        function generateBrowserFingerprint() {
+            const canvas = document.createElement('canvas');
+            const ctx = canvas.getContext('2d');
+            ctx.textBaseline = 'top';
+            ctx.font = '14px Arial';
+            ctx.fillText('Browser fingerprint', 2, 2);
+            
+            const fingerprint = [
+                navigator.userAgent,
+                navigator.language,
+                navigator.platform,
+                navigator.hardwareConcurrency || 'unknown',
+                screen.width + 'x' + screen.height,
+                screen.colorDepth,
+                new Date().getTimezoneOffset(),
+                canvas.toDataURL(),
+                navigator.cookieEnabled,
+                navigator.doNotTrack || 'unknown',
+                // Add available plugins info
+                Array.from(navigator.plugins).map(p => p.name).sort().join(',')
+            ].join('|');
+            
+            return btoa(fingerprint).substring(0, 32);
+        }
+        
+        // Get persistent browser fingerprint (replaces localStorage user ID)
+        function getBrowserFingerprint() {
+            if (!userId) {
+                userId = generateBrowserFingerprint();
+            }
+            return userId;
+        }
+        
+        // Submit rating for current song
+        async function submitRating(rating) {
+            if (!currentTrack.title || !currentTrack.artist) {
+                updateRatingStatus('No song playing');
+                return;
+            }
+            
+            try {
+                const response = await fetch('/api/ratings', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        title: currentTrack.title,
+                        artist: currentTrack.artist,
+                        album: currentTrack.album,
+                        rating: rating,
+                        browser_fingerprint: getBrowserFingerprint()
+                    })
+                });
+                
+                const result = await response.json();
+                
+                if (response.ok) {
+                    userRating = rating;
+                    updateRatingButtons();
+                    loadSongRatings(); // Refresh rating counts
+                    updateRatingStatus(rating === 1 ? 'Thumbs up!' : 'Thumbs down!');
+                } else {
+                    updateRatingStatus('Rating failed: ' + result.error);
+                }
+            } catch (error) {
+                console.error('Rating error:', error);
+                updateRatingStatus('Rating failed');
+            }
+        }
+        
+        // Load current ratings for the song
+        async function loadSongRatings() {
+            if (!currentTrack.title || !currentTrack.artist) return;
+            
+            try {
+                const url = `/api/ratings/song?title=${encodeURIComponent(currentTrack.title)}&artist=${encodeURIComponent(currentTrack.artist)}`;
+                const response = await fetch(url);
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    document.getElementById('thumbsUpCount').textContent = data.ratings.thumbs_up;
+                    document.getElementById('thumbsDownCount').textContent = data.ratings.thumbs_down;
+                } else {
+                    // If no ratings exist yet, show 0
+                    document.getElementById('thumbsUpCount').textContent = '0';
+                    document.getElementById('thumbsDownCount').textContent = '0';
+                }
+            } catch (error) {
+                console.error('Error loading ratings:', error);
+                document.getElementById('thumbsUpCount').textContent = '0';
+                document.getElementById('thumbsDownCount').textContent = '0';
+            }
+        }
+        
+        // Update rating button states
+        function updateRatingButtons() {
+            const thumbsUpBtn = document.getElementById('thumbsUpBtn');
+            const thumbsDownBtn = document.getElementById('thumbsDownBtn');
+            
+            // Reset button states
+            thumbsUpBtn.classList.remove('voted');
+            thumbsDownBtn.classList.remove('voted');
+            
+            // Highlight voted button
+            if (userRating === 1) {
+                thumbsUpBtn.classList.add('voted');
+            } else if (userRating === -1) {
+                thumbsDownBtn.classList.add('voted');
+            }
+        }
+        
+        // Update rating status message
+        function updateRatingStatus(message) {
+            document.getElementById('ratingStatus').textContent = message;
+        }
+        
+        // Fetch and display metadata
+        async function fetchMetadata() {
+            try {
+                console.log('Fetching metadata from:', metadataUrl);
+                const response = await fetch(metadataUrl);
+                const metadata = await response.json();
+                console.log('Metadata received:', metadata);
+                
+                // Check if track changed
+                const newTrack = {
+                    title: metadata.title || '',
+                    artist: metadata.artist || '',
+                    album: metadata.album || ''
+                };
+                
+                const trackChanged = newTrack.title !== currentTrack.title || 
+                                   newTrack.artist !== currentTrack.artist;
+                
+                if (trackChanged) {
+                    console.log('Track changed to:', newTrack);
+                }
+                
+                // Update current track
+                currentTrack = newTrack;
+                
+                // Update now playing display
+                if (metadata.title) {
+                    document.getElementById('mainSongTitle').textContent = metadata.title;
+                }
+                if (metadata.artist) {
+                    document.getElementById('mainArtistName').textContent = metadata.artist;
+                    document.getElementById('artistOverlay').textContent = metadata.artist.toUpperCase();
+                }
+                if (metadata.album) {
+                    document.getElementById('mainAlbumInfo').textContent = metadata.album;
+                }
+                if (metadata.date) {
+                    document.getElementById('yearBadge').textContent = metadata.date;
+                }
+                
+                // If track changed, reset rating and load new ratings
+                if (trackChanged) {
+                    userRating = null;
+                    updateRatingButtons();
+                    loadSongRatings();
+                    updateRatingStatus('Rate this song');
+                }
+                
+                // Update audio quality info
+                if (metadata.bit_depth && metadata.sample_rate) {
+                    document.getElementById('sourceQuality').textContent = 
+                        `${metadata.bit_depth}-bit ${(metadata.sample_rate/1000).toFixed(1)}kHz`;
+                }
+                
+                // Update recent tracks - convert individual fields to array
+                const recentTracks = [];
+                for (let i = 1; i <= 5; i++) {
+                    const artist = metadata[`prev_artist_${i}`];
+                    const title = metadata[`prev_title_${i}`];
+                    if (artist && title) {
+                        recentTracks.push({
+                            artist: artist,
+                            title: title,
+                            album: '' // Album info not available in metadata
+                        });
+                    }
+                }
+                displayRecentTracksInFooter(recentTracks);
+                
+                // Update album art
+                loadAlbumArt();
+                
+                console.log('Metadata updated:', metadata);
+            } catch (error) {
+                console.error('Error fetching metadata:', error);
+                document.getElementById('mainSongTitle').textContent = 'Live Stream';
+                document.getElementById('mainArtistName').textContent = 'RadioCalico';
+                document.getElementById('artistOverlay').textContent = 'RADIOCALICO';
+            }
+        }
+        
+        // Display recent tracks in footer
+        function displayRecentTracksInFooter(tracks) {
+            const trackList = document.getElementById('previousTracksList');
+            
+            if (!tracks.length) {
+                return; // Keep default static list if no tracks available
+            }
+            
+            const recentTracks = tracks.slice(0, 5);
+            
+            const tracksHtml = recentTracks.map(track => `
+                <li><span class="artist">${track.artist || 'Unknown Artist'}:</span> <span class="track">${track.title || 'Unknown Title'}</span></li>
+            `).join('');
+            
+            trackList.innerHTML = tracksHtml;
+        }
+        
+        // Play/Pause functionality
+        function setupPlayButton() {
+            const mainPlayBtn = document.getElementById('mainPlayBtn');
+            if (!mainPlayBtn) {
+                console.error('Main play button not found!');
+                return;
+            }
+            
+            console.log('Setting up play button...');
+            mainPlayBtn.addEventListener('click', async function() {
+                console.log('Play button clicked, isPlaying:', isPlaying);
+                console.log('Audio player ready state:', audioPlayer.readyState);
+                console.log('Audio player current time:', audioPlayer.currentTime);
+                console.log('Audio player paused:', audioPlayer.paused);
+                
+                if (!isPlaying) {
+                    console.log('Attempting to play audio...');
+                    
+                    // Try to load the audio first if not ready
+                    if (audioPlayer.readyState === 0) {
+                        console.log('Audio not loaded, attempting to load...');
+                        try {
+                            await audioPlayer.load();
+                        } catch (e) {
+                            console.log('Load failed, continuing anyway:', e);
+                        }
+                    }
+                    
+                    // Now try to play
+                    audioPlayer.play().then(() => {
+                        console.log('Audio started successfully');
+                        isPlaying = true;
+                        mainPlayBtn.textContent = '⏸';
+                    }).catch(error => {
+                        console.error('Playback error details:', error);
+                        console.error('Error name:', error.name);
+                        console.error('Error message:', error.message);
+                        
+                        let errorMsg = 'Unable to play audio: ' + error.message;
+                        if (error.name === 'NotAllowedError') {
+                            errorMsg = 'Audio blocked by browser. Please allow audio playback and try again.';
+                        } else if (error.name === 'NotSupportedError') {
+                            errorMsg = 'Audio format not supported by browser.';
+                        }
+                        
+                        alert(errorMsg);
+                    });
+                } else {
+                    console.log('Pausing audio...');
+                    audioPlayer.pause();
+                    isPlaying = false;
+                    mainPlayBtn.textContent = '▶';
+                }
+            });
+        }
+        
+        // Mute functionality
+        function setupMuteButton() {
+            const muteBtn = document.getElementById('mainMuteBtn');
+            if (!muteBtn) {
+                console.error('Mute button not found!');
+                return;
+            }
+            
+            muteBtn.addEventListener('click', function() {
+                if (!isMuted) {
+                    audioPlayer.muted = true;
+                    isMuted = true;
+                    muteBtn.textContent = '🔇';
+                } else {
+                    audioPlayer.muted = false;
+                    isMuted = false;
+                    muteBtn.textContent = '🔊';
+                }
+            });
+        }
+        
+        // Volume control
+        function setupVolumeSlider() {
+            const volumeSlider = document.getElementById('mainVolumeSlider');
+            if (!volumeSlider) {
+                console.error('Volume slider not found!');
+                return;
+            }
+            
+            volumeSlider.addEventListener('input', function() {
+                const volume = this.value / 100;
+                audioPlayer.volume = volume;
+                console.log('Volume set to:', volume);
+            });
+        }
+        
+        // Time update for elapsed time display
+        function updateTime() {
+            if (isPlaying) {
+                const currentTime = Date.now() - startTime;
+                const minutes = Math.floor(currentTime / 60000);
+                const seconds = Math.floor((currentTime % 60000) / 1000);
+                document.getElementById('mainCurrentTime').textContent = 
+                    `${minutes}:${seconds.toString().padStart(2, '0')}`;
+            }
+        }
+        
+        let startTime = 0;
+        let timeInterval = null;
+        
+        // Audio event listeners
+        audioPlayer.addEventListener('play', function() {
+            isPlaying = true;
+            mainPlayBtn.textContent = '⏸';
+            startTime = Date.now();
+            timeInterval = setInterval(updateTime, 1000);
+            
+            // Start metadata updates when playing
+            if (!metadataInterval) {
+                fetchMetadata(); // Immediate fetch
+                metadataInterval = setInterval(fetchMetadata, 10000); // Update every 10 seconds
+            }
+        });
+        
+        audioPlayer.addEventListener('pause', function() {
+            isPlaying = false;
+            mainPlayBtn.textContent = '▶';
+            if (timeInterval) {
+                clearInterval(timeInterval);
+                timeInterval = null;
+            }
+            
+            // Stop metadata updates when paused
+            if (metadataInterval) {
+                clearInterval(metadataInterval);
+                metadataInterval = null;
+            }
+        });
+        
+        audioPlayer.addEventListener('error', function(e) {
+            console.error('Audio error:', e);
+            isPlaying = false;
+            mainPlayBtn.textContent = '▶';
+            if (timeInterval) {
+                clearInterval(timeInterval);
+                timeInterval = null;
+            }
+        });
+        
+        // Initialize volume
+        audioPlayer.volume = 0.5;
+        
+        // Rating button setup function
+        function setupRatingButtons() {
+            const thumbsUpBtn = document.getElementById('thumbsUpBtnMain');
+            const thumbsDownBtn = document.getElementById('thumbsDownBtnMain');
+            
+            if (!thumbsUpBtn || !thumbsDownBtn) {
+                console.error('Rating buttons not found!');
+                return;
+            }
+            
+            thumbsUpBtn.addEventListener('click', function() {
+                if (userRating === 1) {
+                    return;
+                }
+                submitRating(1);
+            });
+            
+            thumbsDownBtn.addEventListener('click', function() {
+                if (userRating === -1) {
+                    return;
+                }
+                submitRating(-1);
+            });
+        }
+        
+        // Initialize player when page loads
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log('DOM loaded, initializing player...');
+            
+            // Check if HLS.js library loaded
+            if (typeof Hls === 'undefined') {
+                console.error('HLS.js library not loaded! Check CDN connection.');
+                alert('Media library failed to load. Please refresh the page or check your internet connection.');
+                return;
+            }
+            
+            // Initialize all components
+            initializePlayer();
+            setupPlayButton(); // Setup play button
+            setupMuteButton(); // Setup mute button
+            setupVolumeSlider(); // Setup volume slider
+            setupRatingButtons(); // Setup rating buttons
+            
+            fetchMetadata(); // Load initial metadata
+            loadAlbumArt(); // Load initial album art
+            getBrowserFingerprint(); // Initialize persistent user identification
+            
+            // Ensure the main play button is properly connected
+            const testBtn = document.getElementById('mainPlayBtn');
+            console.log('Main play button found:', testBtn);
+            
+            // Add click listener to page for user interaction (required by some browsers)
+            document.addEventListener('click', function enableAudio() {
+                console.log('User interaction detected - audio should now be playable');
+                document.removeEventListener('click', enableAudio);
+            });
+        });
+        
+        // Cleanup on page unload
+        window.addEventListener('beforeunload', function() {
+            if (hls) {
+                hls.destroy();
+            }
+            if (metadataInterval) {
+                clearInterval(metadataInterval);
+            }
+            if (timeInterval) {
+                clearInterval(timeInterval);
+            }
+        });
+    </script>
+</body>
+</html>
