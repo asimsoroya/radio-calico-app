@@ -32,7 +32,7 @@
                     <p class="album-info" id="mainAlbumInfo">Album Name</p>
                     
                     <div class="quality-info">
-                        <p class="source-quality">Source quality: <span id="sourceQuality">16-bit 44.1kHz</span></p>
+                        <p class="source-quality">Source quality: <span id="sourceQuality">Loading...</span></p>
                         <p class="stream-quality">Stream quality: <span id="streamQuality">48kHz FLAC / HLS Lossless</span></p>
                     </div>
                     
@@ -374,6 +374,8 @@
                 if (metadata.bit_depth && metadata.sample_rate) {
                     document.getElementById('sourceQuality').textContent = 
                         `${metadata.bit_depth}-bit ${(metadata.sample_rate/1000).toFixed(1)}kHz`;
+                } else {
+                    document.getElementById('sourceQuality').textContent = 'Unknown';
                 }
                 
                 // Update recent tracks - convert individual fields to array
